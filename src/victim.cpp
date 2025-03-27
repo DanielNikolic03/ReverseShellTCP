@@ -1,4 +1,5 @@
 // COMPILE WITH: g++ victim.cpp -o victim.exe -lws2_32 -lgdi32
+// Change directory with "cd D:/"
 
 #include <iostream>
 #include <winsock2.h>
