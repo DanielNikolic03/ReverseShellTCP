@@ -40,7 +40,8 @@ void takeScreenshot(SOCKET sock) {
         SelectObject(hDC, hBitmap);
         BitBlt(hDC, 0, 0, screenWidth, screenHeight, hScreen, screenLeft, screenTop, SRCCOPY);
 
-        // Prepare BITMAPINFOHEADER
+        // Prepare bitmap headers
+        BITMAPFILEHEADER fileHeader;
         BITMAPINFOHEADER infoHeader;
         BITMAP bmp;
         GetObject(hBitmap, sizeof(BITMAP), &bmp);
@@ -57,6 +58,12 @@ void takeScreenshot(SOCKET sock) {
         infoHeader.biClrUsed = 0;
         infoHeader.biClrImportant = 0;
 
+        fileHeader.bfType = 0x4D42; // 'BM' signature
+        fileHeader.bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + infoHeader.biSizeImage;
+        fileHeader.bfReserved1 = 0;
+        fileHeader.bfReserved2 = 0;
+        fileHeader.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+
         // Allocate memory for raw image data
         int imageSize = bmp.bmWidth * bmp.bmHeight * 4;
         char* imageData = new char[imageSize];
@@ -64,9 +71,14 @@ void takeScreenshot(SOCKET sock) {
         // Get raw bitmap data
         GetDIBits(hDC, hBitmap, 0, bmp.bmHeight, imageData, (BITMAPINFO*)&infoHeader, DIB_RGB_COLORS);
 
-        // Send image size first (convert to 4-byte network order)
-        uint32_t size = htonl(static_cast<uint32_t>(imageSize));
-        send(sock, (char*)&size, sizeof(size), 0);
+        // Send file size first (header + image data)
+        uint32_t totalSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + imageSize;
+        uint32_t sizeNetworkOrder = htonl(totalSize);
+        send(sock, (char*)&sizeNetworkOrder, sizeof(sizeNetworkOrder), 0);
+
+        // Send the BMP headers first
+        send(sock, (char*)&fileHeader, sizeof(BITMAPFILEHEADER), 0);
+        send(sock, (char*)&infoHeader, sizeof(BITMAPINFOHEADER), 0);
 
         // Send the actual image data
         send(sock, imageData, imageSize, 0);

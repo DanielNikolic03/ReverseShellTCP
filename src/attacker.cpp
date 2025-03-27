@@ -54,27 +54,39 @@ int accept_connection(int server_fd) {
 }
 
 void receive_file(int client_socket, const char* filename) {
-    size_t fileSize;
-    recv(client_socket, (char*)&fileSize, sizeof(fileSize), 0);
-    if (fileSize <= 0) {
-        cerr << "Invalid file size received." << endl;
+    uint32_t fileSizeNetwork;
+    if (recv(client_socket, (char*)&fileSizeNetwork, sizeof(fileSizeNetwork), 0) <= 0) {
+        cerr << "Failed to receive file size." << endl;
         return;
     }
 
+    // Convert from network byte order to host byte order
+    size_t fileSize = ntohl(fileSizeNetwork);
+    //if (fileSize <= 0 || fileSize > 10000000) { // Prevent extremely large files
+    //    cerr << "Invalid file size received: " << fileSize << " bytes" << endl;
+    //    return;
+    //}
+
+    cout << "Receiving file of size: " << fileSize << " bytes..." << endl;
+
     char* fileBuffer = new char[fileSize];
     size_t totalReceived = 0;
+    
     while (totalReceived < fileSize) {
         int bytesReceived = recv(client_socket, fileBuffer + totalReceived, fileSize - totalReceived, 0);
         if (bytesReceived <= 0) {
-            cerr << "Failed to receive file data." << endl;
+            cerr << "Error: Failed to receive full file data. Received only " << totalReceived << " bytes." << endl;
             delete[] fileBuffer;
             return;
         }
         totalReceived += bytesReceived;
     }
 
+    cout << "Successfully received " << totalReceived << " bytes." << endl;
+
+    // Write file to disk
     ofstream outFile(filename, ios::binary);
-    outFile.write(fileBuffer, fileSize);
+    outFile.write(fileBuffer, totalReceived);
     outFile.close();
     delete[] fileBuffer;
 
